@@ -62,17 +62,19 @@ class_names = [
 ]
 
 
-MODEL_ID = "1ZfakZ-a7GLC7WJDwuqtRviitZpKxAj9E"
-MODEL_URL = f"https://drive.google.com/uc?id={MODEL_ID}"
+MODEL_URL = "https://drive.google.com/file/d/1ZfakZ-a7GLC7WJDwuqtRviitZpKxAj9E/view?usp=sharing"
 MODEL_PATH = "fold1_best_model_24_epochs.pt"
 
-# Download model if not present
+# Download the model only if not already present
 if not os.path.exists(MODEL_PATH):
-    print("Downloading model with gdown...")
-    gdown.download(MODEL_URL, MODEL_PATH, quiet=False)
-    print("Download complete.")
-else:
-    print("Model already exists.")
+    try:
+        print("Downloading model from Google Drive...")
+        gdown.download(MODEL_URL, MODEL_PATH, quiet=False, fuzzy=True)
+        print("Download complete.")
+    except Exception as e:
+        print(f"Failed to download model: {e}")
+        raise SystemExit("Model download failed. Please check your Google Drive permissions or internet connection.")
+
 
 
 # Load model
