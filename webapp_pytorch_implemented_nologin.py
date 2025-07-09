@@ -1,5 +1,6 @@
 import streamlit as st
 import urllib.parse
+import gdown
 from PIL import Image
 import torch
 import requests
@@ -13,6 +14,7 @@ from docx import Document
 from transformers import AutoTokenizer, AutoModel
 
 from transformers import AutoModelForCausalLM
+
 
 
 
@@ -60,17 +62,18 @@ class_names = [
 ]
 
 
-MODEL_URL = "https://drive.google.com/uc?export=download&id=1ZfakZ-a7GLC7WJDwuqtRviitZpKxAj9E"
+MODEL_ID = "1ZfakZ-a7GLC7WJDwuqtRviitZpKxAj9E"
+MODEL_URL = f"https://drive.google.com/uc?id={MODEL_ID}"
 MODEL_PATH = "fold1_best_model_24_epochs.pt"
-
 
 # Download model if not present
 if not os.path.exists(MODEL_PATH):
-    with requests.get(MODEL_URL, stream=True) as r:
-        r.raise_for_status()
-        with open(MODEL_PATH, 'wb') as f:
-            for chunk in r.iter_content(chunk_size=8192):
-                f.write(chunk)
+    print("Downloading model with gdown...")
+    gdown.download(MODEL_URL, MODEL_PATH, quiet=False)
+    print("Download complete.")
+else:
+    print("Model already exists.")
+
 
 # Load model
 checkpoint = torch.load(MODEL_PATH, map_location="cpu")
