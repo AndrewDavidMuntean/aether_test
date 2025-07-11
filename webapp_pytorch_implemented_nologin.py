@@ -1,6 +1,5 @@
 import streamlit as st
 import urllib.parse
-import gdown
 from PIL import Image
 import torch
 import requests
@@ -62,23 +61,8 @@ class_names = [
 ]
 
 
-MODEL_URL = "https://drive.google.com/file/d/1ZfakZ-a7GLC7WJDwuqtRviitZpKxAj9E/view?usp=sharing"
-MODEL_PATH = "fold1_best_model_24_epochs.pt"
 
-# Download the model only if not already present
-if not os.path.exists(MODEL_PATH):
-    try:
-        print("Downloading model from Google Drive...")
-        gdown.download(MODEL_URL, MODEL_PATH, quiet=False, fuzzy=True)
-        print("Download complete.")
-    except Exception as e:
-        print(f"Failed to download model: {e}")
-        raise SystemExit("Model download failed. Please check your Google Drive permissions or internet connection.")
-
-
-
-# Load model
-checkpoint = torch.load(MODEL_PATH, map_location="cpu")
+checkpoint = torch.load("fold1_best_model_24_epochs.pt", map_location="cpu")
 print("Checkpoint keys:", checkpoint.keys())
 print("Model state_dict keys (sample):", list(checkpoint["model_state_dict"].keys())[:10])
 
@@ -179,12 +163,12 @@ def get_model_response(image: Image.Image, question: str, model: nn.Module):
     #LLM Response
     prompt = (
     f"You are a highly knowledgeable radiologist interpreting a confirmed X-ray image. "
-    f"The x-ray shows proof of the following: {label_text}. The findings in this are most likely true. \n\n"
     f"The patient (user) has asked the following question:\n\n"
     f"'{question}'\n\n"
-    "You must answer solely based on the conditions listed above. "
+
+    f"You must answer solely based on the conditions found in the x-ray which are listed here: ({label_text}). If a condition didn't appear in the list between the ( and ) signs, that means that the user absolutely, does not have it."
+
     "Do not ask for additional tests, disclaim responsibility, or refer to human doctors. "
-    "Assume the findings are accurate and confirmed. "
     "Do not suggest hypothetical signs or general radiology patterns. "
     "Do not say 'if I had the image' — you have the relevant information.\n\n"
     "Provide a structured, clear, and professional radiological interpretation in response to the question. "
@@ -209,6 +193,7 @@ def load_medgemma():
         device_map="auto",
         torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32
     )
+    print("Label text: {label_text}")
     return tokenizer, model
 
 
@@ -216,9 +201,9 @@ def generate_auto_report(labels: list[str]) -> BytesIO:
     label_text = ", ".join(labels)
     prompt = (
         f"Out of these medical conditions or radiological patterns:\n\n {class_names}\n\n"
-        f"the X-ray image only shows signs of: {label_text}. \n"
-        "Please write a short, professional radiology report which explains any medical conditions or radiological patterns that were identified."
+        f"the X-ray image only shows signs of: ({label_text}). If a condition didn't appear in the list between the ( and ) signs, that means that the user absolutely, does not have it."
         "If there are no abnormalities found, the x-ray shows that the chest is normal"
+        "Please write a short, professional radiology report which explains any medical conditions or radiological patterns that were identified."
 
         "Do not include any sections about clinical history, don't repeat the title, "
         "and do not sign the report or add any closing statements like 'Sincerely'."
@@ -277,7 +262,6 @@ def get_multilabel_predictions(image: Image.Image, model: nn.Module, threshold=0
 
 
 
-st.sidebar.button("Back to Main Menu")
 st.title("X-ray Analyzer")
 
 uploaded_file = st.file_uploader("Upload your X-ray image here:", type=["png", "jpg", "jpeg"])
@@ -288,28 +272,29 @@ if uploaded_file:
     image = image.convert("L")
     image = Image.merge("RGB", (image, image, image))
 
-    col1, col2 = st.columns(2)
-    with col1:
-        x_pixels = st.number_input("Width", min_value=1, step=1, value=224)
-    with col2:
-        y_pixels = st.number_input("Height", min_value=1, step=1, value=224)
 
-    image = image.resize((x_pixels, y_pixels))
+
+    image = image.resize((224, 224))
     st.session_state.image = image
     st.image(st.session_state.image, caption="Preview of Uploaded X-ray", width=300)
 
-
+    st.markdown("### 🔍 Predicted Conditions:")
     #Display predicted conditions
     if "last_uploaded_filename" not in st.session_state or uploaded_file.name != st.session_state.last_uploaded_filename:
-        st.markdown("### 🔍 Predicted Conditions:")
+        
         st.session_state.predictions = get_multilabel_predictions(image, model)
         st.session_state.last_uploaded_filename = uploaded_file.name
     
 
-
+    normalcheck = 0
     for label, score in st.session_state.predictions:
-        emoji = "✅" if score >= 0.7 else "❌"
-        st.write(f"- **{label}**: {score:.2f} {emoji}")
+        if score >= 0.7:
+            emoji = "✅"
+            st.write(f"- **{label}**: {score:.2f} {emoji}")
+            normalcheck = 1
+    if normalcheck == 0:
+        st.write("No abnormalities or medical conditions found!")
+
 
 
 
